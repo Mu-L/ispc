@@ -2,37 +2,9 @@
 ;; target-neon-common.ll
 ;;
 ;;  Copyright(c) 2013-2015 Google, Inc.
-;;  Copyright(c) 2019-2020 Intel
+;;  Copyright(c) 2019-2024 Intel
 ;;
-;;  All rights reserved.
-;;
-;;  Redistribution and use in source and binary forms, with or without
-;;  modification, are permitted provided that the following conditions are
-;;  met:
-;;
-;;    * Redistributions of source code must retain the above copyright
-;;      notice, this list of conditions and the following disclaimer.
-;;
-;;    * Redistributions in binary form must reproduce the above copyright
-;;      notice, this list of conditions and the following disclaimer in the
-;;      documentation and/or other materials provided with the distribution.
-;;
-;;    * Neither the name of Matt Pharr nor the names of its
-;;      contributors may be used to endorse or promote products derived from
-;;      this software without specific prior written permission.
-;;
-;;
-;;   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS
-;;   IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
-;;   TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
-;;   PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER
-;;   OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-;;   EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-;;   PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-;;   PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-;;   LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-;;   NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-;;   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.  
+;;  SPDX-License-Identifier: BSD-3-Clause
 
 
 
@@ -41,8 +13,8 @@ define(`NEON_PREFIX',
         RUNTIME, `32', `llvm.arm.neon')')
 
 define(`NEON_PREFIX_FMIN',
-`ifelse(RUNTIME, `64', `llvm.aarch64.neon.fmin',
-        RUNTIME, `32', `llvm.arm.neon.vmins')')
+`ifelse(RUNTIME, `64', `llvm.minnum.f32',
+        RUNTIME, `32', `llvm.minnum.f32')')
 
 define(`NEON_PREFIX_IMINS',
 `ifelse(RUNTIME, `64', `llvm.aarch64.neon.smin',
@@ -65,8 +37,8 @@ define(`NEON_PREFIX_PMINU',
         RUNTIME, `32', `llvm.arm.neon.vpminu')')
 
 define(`NEON_PREFIX_FMAX',
-`ifelse(RUNTIME, `64', `llvm.aarch64.neon.fmax',
-        RUNTIME, `32', `llvm.arm.neon.vmaxs')')
+`ifelse(RUNTIME, `64', `llvm.maxnum.f32',
+        RUNTIME, `32', `llvm.maxnum.f32')')
 
 define(`NEON_PREFIX_IMAXS',
 `ifelse(RUNTIME, `64', `llvm.aarch64.neon.smax',
@@ -148,12 +120,23 @@ define(`NEON_PREFIX_RSQRTSQ',
 `ifelse(RUNTIME, `64', `llvm.aarch64.neon.frsqrts',
         RUNTIME, `32', `llvm.arm.neon.vrsqrts')')
 
+define(`NEON_PREFIX_UDOT',
+`ifelse(RUNTIME, `64', `llvm.aarch64.neon.udot',
+        RUNTIME, `32', `llvm.arm.neon.udot')')
+
+define(`NEON_PREFIX_SDOT',
+`ifelse(RUNTIME, `64', `llvm.aarch64.neon.sdot',
+        RUNTIME, `32', `llvm.arm.neon.sdot')')
+
+define(`NEON_PREFIX_USDOT',
+`ifelse(RUNTIME, `64', `llvm.aarch64.neon.usdot',
+        RUNTIME, `32', `llvm.arm.neon.usdot')')
 
 stdlib_core()
 scans()
 reduce_equal(WIDTH)
-rdrand_decls()
 define_shuffles()
+define_vector_permutations()
 aossoa()
 ctlztz()
 popcnt()
@@ -186,17 +169,60 @@ define i16 @__float_to_half_uniform(float %v) nounwind readnone alwaysinline {
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; math
 
-declare i32 @llvm.arm.get.fpscr() nounwind
-declare void @llvm.arm.set.fpscr(i32) nounwind
+ifelse(RUNTIME, `32',
+`
+  declare void @llvm.arm.set.fpscr(i32) nounwind
+  declare i32 @llvm.arm.get.fpscr() nounwind
 
-define void @__fastmath() nounwind alwaysinline {
-  %x = call i32 @llvm.arm.get.fpscr()
-  ; Turn on FTZ (bit 24) and default NaN (bit 25)
-  %y = or i32 %x, 50331648
-  call void @llvm.arm.set.fpscr(i32 %y)
-  ret void
-}
+  define void @__fastmath() nounwind alwaysinline {
+    %x = call i32 @llvm.arm.get.fpscr()
+    ; Turn on FTZ (bit 24) and default NaN (bit 25)
+    %y = or i32 %x, 50331648
+    call void @llvm.arm.set.fpscr(i32 %y)
+    ret void
+  }
 
+  define i32 @__set_ftz_daz_flags() nounwind alwaysinline {
+    %x = call i32 @llvm.arm.get.fpscr()
+    ; Turn on FTZ (bit 24) and default NaN (bit 25)
+    %y = or i32 %x, 50331648
+    call void @llvm.arm.set.fpscr(i32 %y)
+    ret i32 %x
+  }
+
+  define void @__restore_ftz_daz_flags(i32 %oldVal) nounwind alwaysinline {
+    ; restore value to previously saved
+    call void @llvm.arm.set.fpscr(i32 %oldVal)
+    ret void
+  }
+',
+  RUNTIME, `64',
+`
+  declare void @llvm.aarch64.set.fpcr(i64) nounwind
+  declare i64 @llvm.aarch64.get.fpcr() nounwind
+
+  define void @__fastmath() nounwind alwaysinline {
+    %x = call i64 @llvm.aarch64.get.fpcr()
+    ; Turn on FTZ (bit 24) and default NaN (bit 25)
+    %y = or i64 %x, 50331648
+    call void @llvm.aarch64.set.fpcr(i64 %y)
+    ret void
+  }
+
+  define i64 @__set_ftz_daz_flags() nounwind alwaysinline {
+    %x = call i64 @llvm.aarch64.get.fpcr()
+    ; Turn on FTZ (bit 24) and default NaN (bit 25)
+    %y = or i64 %x, 50331648
+    call void @llvm.aarch64.set.fpcr(i64 %y)
+    ret i64 %x
+  }
+
+  define void @__restore_ftz_daz_flags(i64 %oldVal) nounwind alwaysinline {
+    ; restore value to previously saved
+    call void @llvm.aarch64.set.fpcr(i64 %oldVal)
+    ret void
+  }
+')
 ;; round/floor/ceil
 
 ;; FIXME: grabbed these from the sse2 target, which does not have native

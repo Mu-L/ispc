@@ -1,34 +1,7 @@
 /*
-  Copyright (c) 2010-2021, Intel Corporation
-  All rights reserved.
+  Copyright (c) 2010-2023, Intel Corporation
 
-  Redistribution and use in source and binary forms, with or without
-  modification, are permitted provided that the following conditions are
-  met:
-
-    * Redistributions of source code must retain the above copyright
-      notice, this list of conditions and the following disclaimer.
-
-    * Redistributions in binary form must reproduce the above copyright
-      notice, this list of conditions and the following disclaimer in the
-      documentation and/or other materials provided with the distribution.
-
-    * Neither the name of Intel Corporation nor the names of its
-      contributors may be used to endorse or promote products derived from
-      this software without specific prior written permission.
-
-
-   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS
-   IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
-   TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
-   PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER
-   OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-   EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-   PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-   PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-   LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-   NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+  SPDX-License-Identifier: BSD-3-Clause
 */
 
 #ifdef _MSC_VER
@@ -136,6 +109,7 @@ static int run() {
         auto device = ispcrtGetDevice(type, gpu_device_idx);
         ISPCRTNewMemoryViewFlags flags;
         flags.allocType = ISPCRT_ALLOC_TYPE_DEVICE;
+        flags.smHint = ISPCRT_SM_HOST_WRITE_DEVICE_READ;
 
         // Setup output array
         auto buf_dev = ispcrtNewMemoryView(device, fimg, imgSize * sizeof(float), &flags);
@@ -162,14 +136,10 @@ static int run() {
         for (unsigned int i = 0; i < niterations; i++) {
             memset((void *)fimg, 0, sizeof(float) * width * height * 3);
             ispcrtCopyToDevice(queue, p_dev);
-            ispcrtDeviceBarrier(queue);
-            ispcrtSync(queue);
             reset_and_start_timer();
             auto res = ispcrtLaunch2D(queue, kernel, p_dev, height * width / 16, 1);
             ispcrtRetain(res);
-            ispcrtDeviceBarrier(queue);
             ispcrtCopyToHost(queue, buf_dev);
-            ispcrtDeviceBarrier(queue);
             ispcrtSync(queue);
 
             if (ispcrtFutureIsValid(res)) {
@@ -183,7 +153,16 @@ static int run() {
         }
 
         printf("[aobench ISPC GPU]:\t\t[%.3f] million cycles (%d x %d image)\n", minCyclesISPC, width, height);
+
+        // Release allocated resources
+        ispcrtRelease(queue);
+        ispcrtRelease(kernel);
+        ispcrtRelease(module);
+        ispcrtRelease(p_dev);
+        ispcrtRelease(buf_dev);
+        ispcrtRelease(device);
     };
+
     run_kernel(ISPCRT_DEVICE_TYPE_CPU);
     savePPM("ao-ispc-cpu.ppm", width, height, fimg);
 

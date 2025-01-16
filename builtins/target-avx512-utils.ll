@@ -1,33 +1,6 @@
-;;  Copyright (c) 2015-2020, Intel Corporation
-;;  All rights reserved.
+;;  Copyright (c) 2015-2024, Intel Corporation
 ;;
-;;  Redistribution and use in source and binary forms, with or without
-;;  modification, are permitted provided that the following conditions are
-;;  met:
-;;
-;;    * Redistributions of source code must retain the above copyright
-;;      notice, this list of conditions and the following disclaimer.
-;;
-;;    * Redistributions in binary form must reproduce the above copyright
-;;      notice, this list of conditions and the following disclaimer in the
-;;      documentation and/or other materials provided with the distribution.
-;;
-;;    * Neither the name of Intel Corporation nor the names of its
-;;      contributors may be used to endorse or promote products derived from
-;;      this software without specific prior written permission.
-;;
-;;
-;;   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS
-;;   IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
-;;   TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
-;;   PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER
-;;   OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-;;   EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-;;   PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-;;   PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-;;   LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-;;   NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-;;   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+;;  SPDX-License-Identifier: BSD-3-Clause
 
 define(`MASK',`i1')
 define(`HAVE_GATHER',`1')
@@ -42,11 +15,7 @@ rdrand_definition()
 popcnt()
 ctlztz()
 halfTypeGenericImplementation()
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; broadcast/rotate/shuffle
-
-define_shuffles()
+define_vector_permutations()
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; aos/soa
@@ -79,22 +48,7 @@ define i16 @__float_to_half_uniform(float %v) nounwind readnone {
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; fast math mode
-
-declare void @llvm.x86.sse.stmxcsr(i8 *) nounwind
-declare void @llvm.x86.sse.ldmxcsr(i8 *) nounwind
-
-define void @__fastmath() nounwind alwaysinline {
-  %ptr = alloca i32
-  %ptr8 = bitcast i32 * %ptr to i8 *
-  call void @llvm.x86.sse.stmxcsr(i8 * %ptr8)
-  %oldval = load PTR_OP_ARGS(`i32 ') %ptr
-
-  ; turn on DAZ (64)/FTZ (32768) -> 32832
-  %update = or i32 %oldval, 32832
-  store i32 %update, i32 *%ptr
-  call void @llvm.x86.sse.ldmxcsr(i8 * %ptr8)
-  ret void
-}
+fastMathFTZDAZ_x86()
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; round/floor/ceil
@@ -265,13 +219,17 @@ define double @__max_uniform_double(double, double) nounwind readnone alwaysinli
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; rsqrt
 
-declare <4 x float> @llvm.x86.sse.rsqrt.ss(<4 x float>) nounwind readnone
+define(`rsqrt14_uniform', `
+declare <4 x float> @llvm.x86.avx512.rsqrt14.ss(<4 x float>, <4 x float>, <4 x float>, i8) nounwind readnone
+define float @__rsqrt_fast_uniform_float(float) nounwind readonly alwaysinline {
+  %v = insertelement <4 x float> undef, float %0, i32 0
+  %vis = call <4 x float> @llvm.x86.avx512.rsqrt14.ss(<4 x float> %v, <4 x float> %v, <4 x float> undef, i8 -1)
+  %is = extractelement <4 x float> %vis, i32 0
+  ret float %is
+}
 
 define float @__rsqrt_uniform_float(float) nounwind readonly alwaysinline {
-  ;  uniform float is = extract(__rsqrt_u(v), 0);
-  %v = insertelement <4 x float> undef, float %0, i32 0
-  %vis = call <4 x float> @llvm.x86.sse.rsqrt.ss(<4 x float> %v)
-  %is = extractelement <4 x float> %vis, i32 0
+  %is = call float @__rsqrt_fast_uniform_float(float %0)
 
   ; Newton-Raphson iteration to improve precision
   ;  return 0.5 * is * (3. - (v * is) * is);
@@ -283,42 +241,88 @@ define float @__rsqrt_uniform_float(float) nounwind readonly alwaysinline {
   ret float %half_scale
 }
 
-define float @__rsqrt_fast_uniform_float(float) nounwind readonly alwaysinline {
-  ;  uniform float is = extract(__rsqrt_u(v), 0);
-  %v = insertelement <4 x float> undef, float %0, i32 0
-  %vis = call <4 x float> @llvm.x86.sse.rsqrt.ss(<4 x float> %v)
-  %is = extractelement <4 x float> %vis, i32 0
-  ret float %is
+declare <2 x double> @llvm.x86.avx512.rsqrt14.sd(<2 x double>, <2 x double>, <2 x double>, i8) nounwind readnone
+define double @__rsqrt_fast_uniform_double(double) nounwind readonly alwaysinline {
+  %v = insertelement <2 x double> undef, double %0, i32 0
+  %vis = call <2 x double> @llvm.x86.avx512.rsqrt14.sd(<2 x double> %v, <2 x double> %v, <2 x double> undef, i8 -1)
+  %is = extractelement <2 x double> %vis, i32 0
+  ret double %is
 }
+
+declare i8 @llvm.x86.avx512.mask.fpclass.sd(<2 x double>, i32, i8)
+define double @__rsqrt_uniform_double(double %v) nounwind readonly alwaysinline {
+  ; detect +/-0 and +inf to deal with them differently.
+  %vec = insertelement <2 x double> undef, double %v, i32 0
+  %corner_cases_i8 = call i8 @llvm.x86.avx512.mask.fpclass.sd(<2 x double> %vec, i32 14, i8 -1)
+  %corner_cases = icmp ne i8 %corner_cases_i8, 0
+  %is = call double @__rsqrt_fast_uniform_double(double %v)
+
+  ; Precision refinement sequence based on minimax approximation.
+  ; This sequence is a little slower than Newton-Raphson, but has much better precision
+  ; Relative error is around 3 ULPs.
+  ; t1 = 1.0 - (v * is) * is
+  ; t2 = 0.37500000407453632 + t1 * 0.31250000550062401
+  ; t3 = 0.5 + t1 * t2
+  ; t4 = is + (t1*is) * t3
+  %v_is = fmul double %v,  %is
+  %v_is_is = fmul double %v_is,  %is
+  %t1 = fsub double 1., %v_is_is
+  %t1_03125 = fmul double 0.31250000550062401, %t1
+  %t2 = fadd double 0.37500000407453632, %t1_03125
+  %t1_t2 = fmul double %t1, %t2
+  %t3 = fadd double 0.5, %t1_t2
+  %t1_is = fmul double %t1, %is
+  %t1_is_t3 = fmul double %t1_is, %t3
+  %t4 = fadd double %is, %t1_is_t3
+  %ret = select i1 %corner_cases, double %is, double %t4
+  ret double %ret
+}
+')
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; rcp
 
-declare <4 x float> @llvm.x86.sse.rcp.ss(<4 x float>) nounwind readnone
-
-define float @__rcp_uniform_float(float) nounwind readonly alwaysinline {
-  ; do the rcpss call
-  ;    uniform float iv = extract(__rcp_u(v), 0);
-  ;    return iv * (2. - v * iv);
-  %vecval = insertelement <4 x float> undef, float %0, i32 0
-  %call = call <4 x float> @llvm.x86.sse.rcp.ss(<4 x float> %vecval)
-  %scall = extractelement <4 x float> %call, i32 0
-
-  ; do one N-R iteration to improve precision, as above
-  %v_iv = fmul float %0, %scall
-  %two_minus = fsub float 2., %v_iv
-  %iv_mul = fmul float %scall, %two_minus
-  ret float %iv_mul
-}
-
+define(`rcp14_uniform', `
+declare <4 x float> @llvm.x86.avx512.rcp14.ss(<4 x float>, <4 x float>, <4 x float>, i8) nounwind readnone
 define float @__rcp_fast_uniform_float(float) nounwind readonly alwaysinline {
-  ;    uniform float iv = extract(__rcp_u(v), 0);
-  ;    return iv;
   %vecval = insertelement <4 x float> undef, float %0, i32 0
-  %call = call <4 x float> @llvm.x86.sse.rcp.ss(<4 x float> %vecval)
+  %call = call <4 x float> @llvm.x86.avx512.rcp14.ss(<4 x float> %vecval, <4 x float> %vecval, <4 x float> undef, i8 -1)
   %scall = extractelement <4 x float> %call, i32 0
   ret float %scall
 }
+
+define float @__rcp_uniform_float(float %v) nounwind readonly alwaysinline {
+  %iv = call float @__rcp_fast_uniform_float(float %v)
+
+  ; do one N-R iteration to improve precision
+  ; iv = rcp(v)
+  ; iv * (2. - v * iv)
+  %v_iv = fmul float %v, %iv
+  %two_minus = fsub float 2., %v_iv
+  %iv_mul = fmul float %iv, %two_minus
+  ret float %iv_mul
+}
+
+declare <2 x double> @llvm.x86.avx512.rcp14.sd(<2 x double>, <2 x double>, <2 x double>, i8) nounwind readnone
+define double @__rcp_fast_uniform_double(double) nounwind readonly alwaysinline {
+  %vecval = insertelement <2 x double> undef, double %0, i32 0
+  %call = call <2 x double> @llvm.x86.avx512.rcp14.sd(<2 x double> %vecval, <2 x double> %vecval, <2 x double> undef, i8 -1)
+  %scall = extractelement <2 x double> %call, i32 0
+  ret double %scall
+}
+
+define double @__rcp_uniform_double(double %v) nounwind readonly alwaysinline {
+  %iv = call double @__rcp_fast_uniform_double(double %v)
+
+  ; do one N-R iteration to improve precision
+  ; iv = rcp(v)
+  ; iv * (2. - v * iv)
+  %v_iv = fmul double %v, %iv
+  %two_minus = fsub double 2., %v_iv
+  %iv_mul = fmul double %iv, %two_minus
+  ret double %iv_mul
+}
+')
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; sqrt
@@ -347,10 +351,10 @@ define float @__sqrt_uniform_float(float) nounwind readonly alwaysinline {
 define(`convert_scale_to_const_gather', `
 
 
- switch i32 %$10, label %default_$1 [ i32 1, label %on_one_$1
-                                      i32 2, label %on_two_$1
-                                      i32 4, label %on_four_$1
-                                      i32 8, label %on_eight_$1]
+ switch i32 %argn(`10',$@), label %default_$1 [ i32 1, label %on_one_$1
+                                                i32 2, label %on_two_$1
+                                                i32 4, label %on_four_$1
+                                                i32 8, label %on_eight_$1]
 
 on_one_$1:
   %$1_1 = call <$3 x $4> @$2(<$3 x $4> undef, i8 * %$5, <$3 x $7> %$6, $9 %$8, i32 1)
@@ -393,10 +397,10 @@ end_bb_$1:
 define(`convert_scale_to_const_scatter', `
 
 
- switch i32 %$10, label %default_$3 [ i32 1, label %on_one_$3
-                                      i32 2, label %on_two_$3
-                                      i32 4, label %on_four_$3
-                                      i32 8, label %on_eight_$3]
+ switch i32 %argn(`10',$@), label %default_$3 [ i32 1, label %on_one_$3
+                                                i32 2, label %on_two_$3
+                                                i32 4, label %on_four_$3
+                                                i32 8, label %on_eight_$3]
 
 on_one_$3:
   call void @$1(i8* %$5, $9 %$8, <$2 x $7> %$6, <$2 x $4> %$3, i32 1)
