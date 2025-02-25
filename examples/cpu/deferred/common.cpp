@@ -1,43 +1,18 @@
 /*
-  Copyright (c) 2011, Intel Corporation
-  All rights reserved.
+  Copyright (c) 2011-2023, Intel Corporation
 
-  Redistribution and use in source and binary forms, with or without
-  modification, are permitted provided that the following conditions are
-  met:
-
-    * Redistributions of source code must retain the above copyright
-      notice, this list of conditions and the following disclaimer.
-
-    * Redistributions in binary form must reproduce the above copyright
-      notice, this list of conditions and the following disclaimer in the
-      documentation and/or other materials provided with the distribution.
-
-    * Neither the name of Intel Corporation nor the names of its
-      contributors may be used to endorse or promote products derived from
-      this software without specific prior written permission.
-
-
-   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS
-   IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
-   TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
-   PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER
-   OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-   EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-   PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-   PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-   LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-   NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+  SPDX-License-Identifier: BSD-3-Clause
 */
 
 #ifdef _MSC_VER
 #define _CRT_SECURE_NO_WARNINGS
 #define ISPC_IS_WINDOWS
-#elif defined(__linux__)
+#elif defined(__linux__) || defined(__FreeBSD__)
 #define ISPC_IS_LINUX
 #elif defined(__APPLE__)
 #define ISPC_IS_APPLE
+#else
+#error "Host OS was not detected"
 #endif
 
 #include <algorithm>
@@ -66,28 +41,28 @@
 static void *lAlignedMalloc(size_t size, int32_t alignment) {
 #ifdef ISPC_IS_WINDOWS
     return _aligned_malloc(size, alignment);
-#endif
-#ifdef ISPC_IS_LINUX
+#elif defined ISPC_IS_LINUX
     return memalign(alignment, size);
-#endif
-#ifdef ISPC_IS_APPLE
+#elif defined ISPC_IS_APPLE
     void *mem = malloc(size + (alignment - 1) + sizeof(void *));
     char *amem = ((char *)mem) + sizeof(void *);
     amem = amem + uint32_t(alignment - (reinterpret_cast<uint64_t>(amem) & (alignment - 1)));
     ((void **)amem)[-1] = mem;
     return amem;
+#else
+#error "Host OS was not detected"
 #endif
 }
 
 static void lAlignedFree(void *ptr) {
 #ifdef ISPC_IS_WINDOWS
     _aligned_free(ptr);
-#endif
-#ifdef ISPC_IS_LINUX
+#elif defined ISPC_IS_LINUX
     free(ptr);
-#endif
-#ifdef ISPC_IS_APPLE
+#elif defined ISPC_IS_APPLE
     free(((void **)ptr)[-1]);
+#else
+#error "Host OS was not detected"
 #endif
 }
 
@@ -120,14 +95,18 @@ InputData *CreateInputDataFromFile(const char *path) {
     // Load header
     if (fread(&input->header, sizeof(ispc::InputHeader), 1, in) != 1) {
         fprintf(stderr, "Preumature EOF reading file \"%s\"\n", path);
-        return NULL;
+        fclose(in);
+        delete input;
+        return nullptr;
     }
 
     // Load data chunk and update pointers
     input->chunk = (uint8_t *)lAlignedMalloc(input->header.inputDataChunkSize, ALIGNMENT_BYTES);
     if (fread(input->chunk, input->header.inputDataChunkSize, 1, in) != 1) {
         fprintf(stderr, "Preumature EOF reading file \"%s\"\n", path);
-        return NULL;
+        fclose(in);
+        delete input;
+        return nullptr;
     }
 
     input->arrays.zBuffer = (float *)&input->chunk[input->header.inputDataArrayOffsets[idaZBuffer]];
@@ -173,6 +152,10 @@ void WriteFrame(const char *filename, const InputData *input, const Framebuffer 
 
     // Write out simple PPM file
     FILE *out = fopen(filename, "wb");
+    if (!out) {
+        printf("Couldn't open a file '%s'\n", filename);
+        exit(1);
+    }
     fprintf(out, "P6 %d %d 255\n", input->header.framebufferWidth, input->header.framebufferHeight);
     fwrite(framebufferAOS, imageBytes, 1, out);
     fclose(out);

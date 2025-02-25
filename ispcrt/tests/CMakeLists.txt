@@ -1,4 +1,4 @@
-## Copyright 2020 Intel Corporation
+## Copyright 2020-2022 Intel Corporation
 ## SPDX-License-Identifier: BSD-3-Clause
 
 cmake_minimum_required(VERSION 3.13)
@@ -11,7 +11,10 @@ project(${ISPCRT_TESTS_PROJECT_NAME}
 #################### Add Google Test to the project #####################
 
 # Tests depend on Google Test submodule
-if(NOT EXISTS "${PROJECT_SOURCE_DIR}/ispcrt/tests/vendor/google/googletest/CMakeLists.txt")
+if (NOT GIT_BINARY)
+    include(${CMAKE_CURRENT_SOURCE_DIR}/../../cmake/Git.cmake)
+endif()
+if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vendor/google/googletest/CMakeLists.txt")
     message(STATUS "Google Test submodule update")
     execute_process(COMMAND ${GIT_BINARY} submodule update --init --recursive
                     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
@@ -36,6 +39,8 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release")
     # But building Google Test, we need it to let it know that optimized build is used.
     target_compile_definitions(gtest PRIVATE NDEBUG)
 endif()
+# This is WA for https://github.com/google/googletest/issues/1305
+target_compile_options(gmock PRIVATE -Wno-deprecated-copy)
 
 ####################### Configure and add submodules  ########################
 
@@ -48,6 +53,4 @@ add_subdirectory(level_zero_mock)
 add_subdirectory(mock_tests)
 
 # Install gtest libraries
-install(
-    TARGETS gtest gtest_main
-    LIBRARY DESTINATION ${CMAKE_BINARY_DIR}/tests)
+install(TARGETS gtest gtest_main LIBRARY COMPONENT ispcrt-tests EXCLUDE_FROM_ALL)
