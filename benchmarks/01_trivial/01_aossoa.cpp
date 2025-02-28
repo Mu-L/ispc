@@ -1,3 +1,6 @@
+// Copyright (c) 2021-2024, Intel Corporation
+// SPDX-License-Identifier: BSD-3-Clause
+
 #include <benchmark/benchmark.h>
 #include <cstdint>
 #include <stdio.h>
@@ -10,6 +13,8 @@ static Docs docs("aos_to_soa*_stdlib_<type> - test for stdlib implimentation for
                  "Expectations:\n"
                  " - stdlib functions have the same speed for float vs int32 and double vs int64.\n"
                  " - stdlib implementation is faster or has same performance as ISPC implementation.\n");
+
+WARM_UP_RUN();
 
 // Minimum size is maximum target width * 4, i.e. 64*4 = 256.
 // 256 * sizeof (int) = 1kb - expected to reside in L1

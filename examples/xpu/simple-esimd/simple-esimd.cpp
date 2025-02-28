@@ -1,10 +1,12 @@
-//==---------------- simple-esimd.cpp  - DPC++ ESIMD on-device test ---------==//
+/*
+  Copyright (c) 2021-2023, Intel Corporation
+*/
 
-#include <CL/sycl.hpp>
 #include <iostream>
-#include <sycl/ext/intel/experimental/esimd.hpp>
+#include <CL/sycl.hpp>
+#include <sycl/ext/intel/esimd.hpp>
 
-using namespace sycl::ext::intel::experimental::esimd;
+using namespace sycl::ext::intel::esimd;
 
 constexpr unsigned VL = 8;
 

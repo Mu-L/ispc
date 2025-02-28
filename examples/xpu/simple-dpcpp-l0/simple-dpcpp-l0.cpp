@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2021, Intel Corporation
+ * Copyright (c) 2020-2023, Intel Corporation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -29,7 +29,7 @@
 
 // SYCL and interoperability headers
 #include <CL/sycl.hpp>
-#include <CL/sycl/backend/level_zero.hpp>
+#include <sycl/ext/oneapi/backend/level_zero.hpp>
 
 #include "L0_helpers.h"
 #include "simple-dpcpp-l0.hpp"
@@ -63,9 +63,9 @@ std::vector<float> DpcppApp::transformIspc(const std::vector<float> &in) {
     ze_device_mem_alloc_desc_t alloc_desc = {};
 
     // Allocate memory on the device
-    L0_SAFE_CALL(zeMemAllocDevice(m_context, &alloc_desc, count * sizeof(float), 0, m_device, &in_dev));
-    L0_SAFE_CALL(zeMemAllocDevice(m_context, &alloc_desc, count * sizeof(float), 0, m_device, &out_dev));
-    L0_SAFE_CALL(zeMemAllocDevice(m_context, &alloc_desc, sizeof(Parameters), 0, m_device, &params_dev));
+    L0_SAFE_CALL(zeMemAllocDevice(m_context, &alloc_desc, count * sizeof(float), 64, m_device, &in_dev));
+    L0_SAFE_CALL(zeMemAllocDevice(m_context, &alloc_desc, count * sizeof(float), 64, m_device, &out_dev));
+    L0_SAFE_CALL(zeMemAllocDevice(m_context, &alloc_desc, sizeof(Parameters), 64, m_device, &params_dev));
 
     params.in = reinterpret_cast<float *>(in_dev);
     params.out = reinterpret_cast<float *>(out_dev);
@@ -107,12 +107,14 @@ std::vector<float> DpcppApp::transformDpcpp(const std::vector<float> &in) {
     // Thanks to this API Level Zero (ISPC) based programs
     // can share device context with SYCL programs implemented
     // using oneAPI DPC++ compiler
-    auto platform = sycl::level_zero::make<cl::sycl::platform>(m_driver);
-    auto device = sycl::level_zero::make<cl::sycl::device>(platform, m_device);
-    // Set ownership of the native context handle to our app.
-    auto ctx =
-        sycl::level_zero::make<cl::sycl::context>(platform.get_devices(), m_context, sycl::level_zero::ownership::keep);
-    auto q = sycl::level_zero::make<cl::sycl::queue>(ctx, m_command_queue);
+    auto platform = sycl::ext::oneapi::level_zero::make_platform((uintptr_t)m_driver);
+    auto device = sycl::ext::oneapi::level_zero::make_device(platform, (uintptr_t)m_device);
+
+    auto ctx = sycl::ext::oneapi::level_zero::make_context(platform.get_devices(), (uintptr_t)m_context,
+                                                           /*keep ownership of m_context handler on ISPC side*/ true);
+    auto q = sycl::ext::oneapi::level_zero::make_queue(
+        ctx, device, (uintptr_t)m_command_queue, /* immediate command list*/ false,
+        /*keep ownership of m_command_queue handler on ISPC side*/ true, sycl::property_list{});
 
     // Set problem space
     sycl::range<1> range{count};
@@ -140,7 +142,7 @@ std::vector<float> DpcppApp::transformDpcpp(const std::vector<float> &in) {
 
     // Use accessor to transfer data from the device
     std::vector<float> res(count);
-    const auto out_host_access = out_buffer.get_access<cl::sycl::access::mode::read>();
+    const auto out_host_access = out_buffer.get_host_access();
     for (int i = 0; i < out_host_access.size(); i++) {
         res[i] = out_host_access[i];
     }

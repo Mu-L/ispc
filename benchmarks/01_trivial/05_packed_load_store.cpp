@@ -1,3 +1,6 @@
+// Copyright (c) 2021-2025, Intel Corporation
+// SPDX-License-Identifier: BSD-3-Clause
+
 #include <benchmark/benchmark.h>
 #include <bitset>
 #include <cstdint>
@@ -22,10 +25,12 @@ static Docs
          "Expectation:\n"
          " - No regressions\n");
 
+WARM_UP_RUN();
+
 // Minimum size is maximum target width, i.e. 64.
 // Larger buffer is better, but preferably to stay within L1.
 #define ARGS Arg(8192)
-//#define ARGS RangeMultiplier(2)->Range(64, 64<<15)->Complexity(benchmark::oN)
+// #define ARGS RangeMultiplier(2)->Range(64, 64<<15)->Complexity(benchmark::oN)
 
 template <typename T> static void init(T *src, T *dst, int count) {
     for (int i = 0; i < count; i++) {
@@ -157,6 +162,42 @@ static void check_packed_store_active2_neq(T *src, T *dst, const unsigned int in
 // 3 is 1/4, 3/4
 // 7 is 1/8, 7/8
 // 15 is 1/16, 15/16
+
+PACKED_LOAD_STORE_COND(int8_t, int8, packed_load_active, 0)
+PACKED_LOAD_STORE_COND(int8_t, int8, packed_load_active, 1)
+PACKED_LOAD_STORE_COND(int8_t, int8, packed_load_active, 3)
+PACKED_LOAD_STORE_COND(int8_t, int8, packed_load_active, 7)
+PACKED_LOAD_STORE_COND(int8_t, int8, packed_load_active, 15)
+
+PACKED_LOAD_STORE_COND(int8_t, int8, packed_store_active, 0)
+PACKED_LOAD_STORE_COND(int8_t, int8, packed_store_active, 1)
+PACKED_LOAD_STORE_COND(int8_t, int8, packed_store_active, 3)
+PACKED_LOAD_STORE_COND(int8_t, int8, packed_store_active, 7)
+PACKED_LOAD_STORE_COND(int8_t, int8, packed_store_active, 15)
+
+PACKED_LOAD_STORE_COND(int8_t, int8, packed_store_active2, 0)
+PACKED_LOAD_STORE_COND(int8_t, int8, packed_store_active2, 1)
+PACKED_LOAD_STORE_COND(int8_t, int8, packed_store_active2, 3)
+PACKED_LOAD_STORE_COND(int8_t, int8, packed_store_active2, 7)
+PACKED_LOAD_STORE_COND(int8_t, int8, packed_store_active2, 15)
+
+PACKED_LOAD_STORE_COND(int16_t, int16, packed_load_active, 0)
+PACKED_LOAD_STORE_COND(int16_t, int16, packed_load_active, 1)
+PACKED_LOAD_STORE_COND(int16_t, int16, packed_load_active, 3)
+PACKED_LOAD_STORE_COND(int16_t, int16, packed_load_active, 7)
+PACKED_LOAD_STORE_COND(int16_t, int16, packed_load_active, 15)
+
+PACKED_LOAD_STORE_COND(int16_t, int16, packed_store_active, 0)
+PACKED_LOAD_STORE_COND(int16_t, int16, packed_store_active, 1)
+PACKED_LOAD_STORE_COND(int16_t, int16, packed_store_active, 3)
+PACKED_LOAD_STORE_COND(int16_t, int16, packed_store_active, 7)
+PACKED_LOAD_STORE_COND(int16_t, int16, packed_store_active, 15)
+
+PACKED_LOAD_STORE_COND(int16_t, int16, packed_store_active2, 0)
+PACKED_LOAD_STORE_COND(int16_t, int16, packed_store_active2, 1)
+PACKED_LOAD_STORE_COND(int16_t, int16, packed_store_active2, 3)
+PACKED_LOAD_STORE_COND(int16_t, int16, packed_store_active2, 7)
+PACKED_LOAD_STORE_COND(int16_t, int16, packed_store_active2, 15)
 
 PACKED_LOAD_STORE_COND(int32_t, int32, packed_load_active, 0)
 PACKED_LOAD_STORE_COND(int32_t, int32, packed_load_active, 1)

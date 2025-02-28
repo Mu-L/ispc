@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021, Intel Corporation
+ * Copyright (c) 2021-2023, Intel Corporation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -30,7 +30,7 @@
 
 // SYCL and interoperability headers
 #include <CL/sycl.hpp>
-#include <CL/sycl/backend/level_zero.hpp>
+#include <sycl/ext/oneapi/backend/level_zero.hpp>
 
 #include "L0_helpers.h"
 #include "simple-dpcpp.hpp"
@@ -75,21 +75,12 @@ std::vector<float> DpcppApp::transformIspc(std::vector<float> &in) {
     m_queue.copyToDevice(p_dev);
     m_queue.copyToDevice(in_dev);
 
-    // Make sure that input arrays were copied
-    m_queue.barrier();
-
     // Launch the kernel on the device using 1 thread
     m_queue.launch(m_kernel, p_dev, 1);
-
-    // Make sure that execution completed
-    m_queue.barrier();
 
     // ispcrt::Array objects which used as outputs of ISPC kernel should be
     // explicitly copied to host from device
     m_queue.copyToHost(out_dev);
-
-    // Make sure that input arrays were copied
-    m_queue.barrier();
 
     // Execute queue and sync
     m_queue.sync();
@@ -110,12 +101,15 @@ std::vector<float> DpcppApp::transformDpcpp(const std::vector<float> &in) {
     auto nativeContext = static_cast<ze_context_handle_t>(m_device.nativeContextHandle());
     auto nativeQueue = static_cast<ze_command_queue_handle_t>(m_queue.nativeTaskQueueHandle());
 
-    auto platform = sycl::level_zero::make<cl::sycl::platform>(nativePlatform);
-    auto device = sycl::level_zero::make<cl::sycl::device>(platform, nativeDevice);
-    // Set ownership of the native context handle to our app.
-    auto ctx = sycl::level_zero::make<cl::sycl::context>(platform.get_devices(), nativeContext,
-                                                         sycl::level_zero::ownership::keep);
-    auto q = sycl::level_zero::make<cl::sycl::queue>(ctx, nativeQueue);
+    auto platform = sycl::ext::oneapi::level_zero::make_platform((uintptr_t)nativePlatform);
+    auto device = sycl::ext::oneapi::level_zero::make_device(platform, (uintptr_t)nativeDevice);
+
+    auto ctx =
+        sycl::ext::oneapi::level_zero::make_context(platform.get_devices(), (uintptr_t)nativeContext,
+                                                    /*keep ownership of nativeContext handler on ISPC side*/ true);
+    auto q = sycl::ext::oneapi::level_zero::make_queue(
+        ctx, device, (uintptr_t)nativeQueue, /* immediate command list*/ false,
+        /*keep ownership of m_command_queue handler on ISPC side*/ true, sycl::property_list{});
 
     // Set problem space
     sycl::range<1> range{count};
@@ -143,7 +137,7 @@ std::vector<float> DpcppApp::transformDpcpp(const std::vector<float> &in) {
 
     // Use accessor to transfer data from the device
     std::vector<float> res(count);
-    const auto out_host_access = out_buffer.get_access<cl::sycl::access::mode::read>();
+    const auto out_host_access = out_buffer.get_host_access();
     for (int i = 0; i < out_host_access.size(); i++) {
         res[i] = out_host_access[i];
     }

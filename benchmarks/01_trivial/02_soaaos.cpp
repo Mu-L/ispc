@@ -1,3 +1,6 @@
+// Copyright (c) 2021-2024, Intel Corporation
+// SPDX-License-Identifier: BSD-3-Clause
+
 #include <benchmark/benchmark.h>
 #include <cstdint>
 #include <stdio.h>
@@ -12,6 +15,8 @@ static Docs docs("soa_to_aos*_stdlib_<type> - test for stdlib implimentation for
                  " - stdlib implementation is faster or has same performance as ISPC implementation.\n"
                  "TODO:\n"
                  " - ISPC source code implementation.\n");
+
+WARM_UP_RUN();
 
 // Minimum size is maximum target width * 4, i.e. 64*4 = 256.
 // 256 * sizeof (int) = 1kb - expected to reside in L1

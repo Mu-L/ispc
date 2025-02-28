@@ -1,33 +1,6 @@
-;;  Copyright (c) 2010-2019, Intel Corporation
-;;  All rights reserved.
+;;  Copyright (c) 2010-2024, Intel Corporation
 ;;
-;;  Redistribution and use in source and binary forms, with or without
-;;  modification, are permitted provided that the following conditions are
-;;  met:
-;;
-;;    * Redistributions of source code must retain the above copyright
-;;      notice, this list of conditions and the following disclaimer.
-;;
-;;    * Redistributions in binary form must reproduce the above copyright
-;;      notice, this list of conditions and the following disclaimer in the
-;;      documentation and/or other materials provided with the distribution.
-;;
-;;    * Neither the name of Intel Corporation nor the names of its
-;;      contributors may be used to endorse or promote products derived from
-;;      this software without specific prior written permission.
-;;
-;;
-;;   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS
-;;   IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
-;;   TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
-;;   PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER
-;;   OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-;;   EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-;;   PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-;;   PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-;;   LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-;;   NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-;;   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.  
+;;  SPDX-License-Identifier: BSD-3-Clause
 
 
 ;; This file defines the target for "double-pumped" SSE4, i.e. running
@@ -38,6 +11,7 @@
 
 define(`WIDTH',`8')
 define(`MASK',`i32')
+define(`ISA',`SSE4')
 include(`util.m4')
 
 stdlib_core()
@@ -45,16 +19,9 @@ packed_load_and_store(FALSE)
 scans()
 int64minmax()
 saturation_arithmetic()
+define_shuffles()
 
 include(`target-sse4-common.ll')
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; half conversion routines
-
-declare float @__half_to_float_uniform(i16 %v) nounwind readnone
-declare <WIDTH x float> @__half_to_float_varying(<WIDTH x i16> %v) nounwind readnone
-declare i16 @__float_to_half_uniform(float %v) nounwind readnone
-declare <WIDTH x i16> @__float_to_half_varying(<WIDTH x float> %v) nounwind readnone
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; rcp
@@ -114,17 +81,10 @@ define <8 x float> @__sqrt_varying_float(<8 x float>) nounwind readonly alwaysin
 }
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-; svml stuff
+; svml
 
 include(`svml.m4')
-;; single precision
-svml_declare(float,f4,4)
-svml_define_x(float,f4,4,f,8)
-
-;; double precision
-svml_declare(double,2,2)
-svml_define_x(double,2,2,d,8)
-
+svml(ISA)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; float min/max
@@ -614,8 +574,10 @@ define_avgs()
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; reciprocals in double precision, if supported
 
-rsqrtd_decl()
-rcpd_decl()
 
-transcendetals_decl()
-trigonometry_decl()
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; rcp/rsqrt declarations for half
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; dot product

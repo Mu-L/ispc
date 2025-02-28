@@ -1,34 +1,7 @@
 /*
-  Copyright (c) 2020-2021, Intel Corporation
-  All rights reserved.
+  Copyright (c) 2020-2023, Intel Corporation
 
-  Redistribution and use in source and binary forms, with or without
-  modification, are permitted provided that the following conditions are
-  met:
-
-    * Redistributions of source code must retain the above copyright
-      notice, this list of conditions and the following disclaimer.
-
-    * Redistributions in binary form must reproduce the above copyright
-      notice, this list of conditions and the following disclaimer in the
-      documentation and/or other materials provided with the distribution.
-
-    * Neither the name of Intel Corporation nor the names of its
-      contributors may be used to endorse or promote products derived from
-      this software without specific prior written permission.
-
-
-   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS
-   IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
-   TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
-   PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER
-   OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-   EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-   PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-   PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-   LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-   NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+  SPDX-License-Identifier: BSD-3-Clause
 */
 
 #include <algorithm>
@@ -88,10 +61,10 @@ bool validate_result(const ispcrt::SharedVector<float>& vec, const std::vector<f
 }
 
 static int run(const ISPCRTDeviceType device_type, const unsigned int SIZE) {
-    ispcrt::Device device(device_type);
+    ispcrt::Context context(device_type);
 
     // Create allocator for USM memory
-    ispcrt::SharedMemoryAllocator<float> sma(device);
+    ispcrt::SharedMemoryAllocator<float> sma(context);
 
     // Allocate a vector of floats in the shared memory
     ispcrt::SharedVector<float> vec(SIZE, sma);
@@ -100,13 +73,15 @@ static int run(const ISPCRTDeviceType device_type, const unsigned int SIZE) {
     std::vector<float> vgold(SIZE);
 
     // Setup parameters structure - in shared memory
-    ispcrt::Array<Parameters, ispcrt::AllocType::Shared> p(device);
+    ispcrt::Array<Parameters, ispcrt::AllocType::Shared> p(context);
     auto pp = p.sharedPtr();
 
     // Pass data pointers to the device
     pp->vec = vec.data();
     pp->count = SIZE;
 
+    // Create device from context
+    ispcrt::Device device(context);
     // Create module and kernel to execute
     ispcrt::Module module(device, "xe_simple-usm");
     ispcrt::Kernel kernel(device, module, "simple_ispc");
@@ -146,6 +121,8 @@ void usage(const char *p) {
 }
 
 int main(int argc, char *argv[]) {
+    std::ios_base::fmtflags f(std::cout.flags());
+
     constexpr unsigned int SIZE = 16;
 
     // Run on CPU by default
@@ -169,5 +146,6 @@ int main(int argc, char *argv[]) {
     }
 
     int success = run(device_type, SIZE);
+    std::cout.flags(f);
     return success;
 }

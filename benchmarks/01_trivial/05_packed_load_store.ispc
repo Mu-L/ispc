@@ -1,3 +1,6 @@
+// Copyright (c) 2021-2025, Intel Corporation
+// SPDX-License-Identifier: BSD-3-Clause
+
 export uniform int width() { return programCount; }
 
 // This case loads based on condition.
@@ -51,6 +54,14 @@ export uniform int width() { return programCount; }
         }                                                                                                              \
         return num;                                                                                                    \
     }
+
+PACKEDLOAD(int8)
+PACKEDSTORE(int8, packed_store_active)
+PACKEDSTORE(int8, packed_store_active2)
+
+PACKEDLOAD(int16)
+PACKEDSTORE(int16, packed_store_active)
+PACKEDSTORE(int16, packed_store_active2)
 
 PACKEDLOAD(int32)
 PACKEDSTORE(int32, packed_store_active)

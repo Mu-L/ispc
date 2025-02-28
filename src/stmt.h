@@ -1,34 +1,7 @@
 /*
-  Copyright (c) 2010-2021, Intel Corporation
-  All rights reserved.
+  Copyright (c) 2010-2023, Intel Corporation
 
-  Redistribution and use in source and binary forms, with or without
-  modification, are permitted provided that the following conditions are
-  met:
-
-    * Redistributions of source code must retain the above copyright
-      notice, this list of conditions and the following disclaimer.
-
-    * Redistributions in binary form must reproduce the above copyright
-      notice, this list of conditions and the following disclaimer in the
-      documentation and/or other materials provided with the distribution.
-
-    * Neither the name of Intel Corporation nor the names of its
-      contributors may be used to endorse or promote products derived from
-      this software without specific prior written permission.
-
-
-   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS
-   IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
-   TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
-   PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER
-   OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-   EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-   PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-   PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-   LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-   NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+  SPDX-License-Identifier: BSD-3-Clause
 */
 
 /** @file stmt.h
@@ -59,16 +32,13 @@ class Stmt : public ASTNode {
      */
     virtual void EmitCode(FunctionEmitContext *ctx) const = 0;
 
-    /** Print a representation of the statement (and any children AST
-        nodes) to standard output.  This method is used for debuggins. */
-    virtual void Print(int indent) const = 0;
-
     // Redeclare these methods with Stmt * return values, rather than
     // ASTNode *s, as in the original ASTNode declarations of them.  We'll
     // also provide a default implementation of Optimize(), since most
     // Stmts don't have anything to do here.
     virtual Stmt *Optimize();
     virtual Stmt *TypeCheck() = 0;
+    virtual Stmt *Instantiate(TemplateInstantiation &templInst) const = 0;
 
     virtual void SetLoopAttribute(std::pair<Globals::pragmaUnrollType, int>);
 };
@@ -82,16 +52,17 @@ class ExprStmt : public Stmt {
     static inline bool classof(ASTNode const *N) { return N->getValueID() == ExprStmtID; }
 
     void EmitCode(FunctionEmitContext *ctx) const;
-    void Print(int indent) const;
+    void Print(Indent &indent) const;
 
     Stmt *TypeCheck();
     int EstimateCost() const;
+    ExprStmt *Instantiate(TemplateInstantiation &templInst) const;
 
     Expr *expr;
 };
 
 struct VariableDeclaration {
-    VariableDeclaration(Symbol *s = NULL, Expr *i = NULL) {
+    VariableDeclaration(Symbol *s = nullptr, Expr *i = nullptr) {
         sym = s;
         init = i;
     }
@@ -109,11 +80,12 @@ class DeclStmt : public Stmt {
     static inline bool classof(ASTNode const *N) { return N->getValueID() == DeclStmtID; }
 
     void EmitCode(FunctionEmitContext *ctx) const;
-    void Print(int indent) const;
+    void Print(Indent &indent) const;
 
     Stmt *Optimize();
     Stmt *TypeCheck();
     int EstimateCost() const;
+    DeclStmt *Instantiate(TemplateInstantiation &templInst) const;
 
     std::vector<VariableDeclaration> vars;
 };
@@ -128,10 +100,11 @@ class IfStmt : public Stmt {
     static inline bool classof(ASTNode const *N) { return N->getValueID() == IfStmtID; }
 
     void EmitCode(FunctionEmitContext *ctx) const;
-    void Print(int indent) const;
+    void Print(Indent &indent) const;
 
     Stmt *TypeCheck();
     int EstimateCost() const;
+    IfStmt *Instantiate(TemplateInstantiation &templInst) const;
 
     // @todo these are only public for lHasVaryingBreakOrContinue(); would
     // be nice to clean that up...
@@ -167,7 +140,7 @@ class DoStmt : public Stmt {
     static inline bool classof(ASTNode const *N) { return N->getValueID() == DoStmtID; }
 
     void EmitCode(FunctionEmitContext *ctx) const;
-    void Print(int indent) const;
+    void Print(Indent &indent) const;
 
     Stmt *TypeCheck();
 
@@ -175,6 +148,7 @@ class DoStmt : public Stmt {
         std::pair<Globals::pragmaUnrollType, int>(Globals::pragmaUnrollType::none, -1);
     void SetLoopAttribute(std::pair<Globals::pragmaUnrollType, int>);
     int EstimateCost() const;
+    DoStmt *Instantiate(TemplateInstantiation &templInst) const;
 
     Expr *testExpr;
     Stmt *bodyStmts;
@@ -193,7 +167,7 @@ class ForStmt : public Stmt {
     static inline bool classof(ASTNode const *N) { return N->getValueID() == ForStmtID; }
 
     void EmitCode(FunctionEmitContext *ctx) const;
-    void Print(int indent) const;
+    void Print(Indent &indent) const;
 
     Stmt *TypeCheck();
 
@@ -201,8 +175,9 @@ class ForStmt : public Stmt {
         std::pair<Globals::pragmaUnrollType, int>(Globals::pragmaUnrollType::none, -1);
     void SetLoopAttribute(std::pair<Globals::pragmaUnrollType, int>);
     int EstimateCost() const;
+    ForStmt *Instantiate(TemplateInstantiation &templInst) const;
 
-    /** 'for' statment initializer; may be NULL, indicating no intitializer */
+    /** 'for' statment initializer; may be nullptr, indicating no intitializer */
     Stmt *init;
     /** expression that returns a value indicating whether the loop should
         continue for the next iteration */
@@ -225,10 +200,11 @@ class BreakStmt : public Stmt {
     static inline bool classof(ASTNode const *N) { return N->getValueID() == BreakStmtID; }
 
     void EmitCode(FunctionEmitContext *ctx) const;
-    void Print(int indent) const;
+    void Print(Indent &indent) const;
 
     Stmt *TypeCheck();
     int EstimateCost() const;
+    BreakStmt *Instantiate(TemplateInstantiation &templInst) const;
 };
 
 /** @brief Statement implementation for a continue statement in the
@@ -241,10 +217,11 @@ class ContinueStmt : public Stmt {
     static inline bool classof(ASTNode const *N) { return N->getValueID() == ContinueStmtID; }
 
     void EmitCode(FunctionEmitContext *ctx) const;
-    void Print(int indent) const;
+    void Print(Indent &indent) const;
 
     Stmt *TypeCheck();
     int EstimateCost() const;
+    ContinueStmt *Instantiate(TemplateInstantiation &templInst) const;
 };
 
 /** @brief Statement implementation for parallel 'foreach' loops.
@@ -261,13 +238,14 @@ class ForeachStmt : public Stmt {
     void EmitCodeForXe(FunctionEmitContext *ctx) const;
 #endif
     void EmitCode(FunctionEmitContext *ctx) const;
-    void Print(int indent) const;
+    void Print(Indent &indent) const;
 
     Stmt *TypeCheck();
     std::pair<Globals::pragmaUnrollType, int> loopAttribute =
         std::pair<Globals::pragmaUnrollType, int>(Globals::pragmaUnrollType::none, -1);
     void SetLoopAttribute(std::pair<Globals::pragmaUnrollType, int>);
     int EstimateCost() const;
+    ForeachStmt *Instantiate(TemplateInstantiation &templInst) const;
 
     std::vector<Symbol *> dimVariables;
     std::vector<Expr *> startExprs;
@@ -286,13 +264,14 @@ class ForeachActiveStmt : public Stmt {
     static inline bool classof(ASTNode const *N) { return N->getValueID() == ForeachActiveStmtID; }
 
     void EmitCode(FunctionEmitContext *ctx) const;
-    void Print(int indent) const;
+    void Print(Indent &indent) const;
 
     Stmt *TypeCheck();
     std::pair<Globals::pragmaUnrollType, int> loopAttribute =
         std::pair<Globals::pragmaUnrollType, int>(Globals::pragmaUnrollType::none, -1);
     void SetLoopAttribute(std::pair<Globals::pragmaUnrollType, int>);
     int EstimateCost() const;
+    ForeachActiveStmt *Instantiate(TemplateInstantiation &templInst) const;
 
     Symbol *sym;
     Stmt *stmts;
@@ -304,18 +283,20 @@ class ForeachActiveStmt : public Stmt {
 class ForeachUniqueStmt : public Stmt {
   public:
     ForeachUniqueStmt(const char *iterName, Expr *expr, Stmt *stmts, SourcePos pos);
+    ForeachUniqueStmt(Symbol *sym, Expr *expr, Stmt *stmts, SourcePos pos);
 
     static inline bool classof(ForeachUniqueStmt const *) { return true; }
     static inline bool classof(ASTNode const *N) { return N->getValueID() == ForeachUniqueStmtID; }
 
     void EmitCode(FunctionEmitContext *ctx) const;
-    void Print(int indent) const;
+    void Print(Indent &indent) const;
 
     Stmt *TypeCheck();
     std::pair<Globals::pragmaUnrollType, int> loopAttribute =
         std::pair<Globals::pragmaUnrollType, int>(Globals::pragmaUnrollType::none, -1);
     void SetLoopAttribute(std::pair<Globals::pragmaUnrollType, int>);
     int EstimateCost() const;
+    ForeachUniqueStmt *Instantiate(TemplateInstantiation &templInst) const;
 
     Symbol *sym;
     Expr *expr;
@@ -332,10 +313,11 @@ class UnmaskedStmt : public Stmt {
     static inline bool classof(ASTNode const *N) { return N->getValueID() == UnmaskedStmtID; }
 
     void EmitCode(FunctionEmitContext *ctx) const;
-    void Print(int indent) const;
+    void Print(Indent &indent) const;
 
     Stmt *TypeCheck();
     int EstimateCost() const;
+    UnmaskedStmt *Instantiate(TemplateInstantiation &templInst) const;
 
     Stmt *stmts;
 };
@@ -350,10 +332,11 @@ class ReturnStmt : public Stmt {
     static inline bool classof(ASTNode const *N) { return N->getValueID() == ReturnStmtID; }
 
     void EmitCode(FunctionEmitContext *ctx) const;
-    void Print(int indent) const;
+    void Print(Indent &indent) const;
 
     Stmt *TypeCheck();
     int EstimateCost() const;
+    ReturnStmt *Instantiate(TemplateInstantiation &templInst) const;
 
     Expr *expr;
 };
@@ -369,10 +352,11 @@ class CaseStmt : public Stmt {
     static inline bool classof(ASTNode const *N) { return N->getValueID() == CaseStmtID; }
 
     void EmitCode(FunctionEmitContext *ctx) const;
-    void Print(int indent) const;
+    void Print(Indent &indent) const;
 
     Stmt *TypeCheck();
     int EstimateCost() const;
+    CaseStmt *Instantiate(TemplateInstantiation &templInst) const;
 
     /** Integer value after the "case" statement */
     const int value;
@@ -389,10 +373,11 @@ class DefaultStmt : public Stmt {
     static inline bool classof(ASTNode const *N) { return N->getValueID() == DefaultStmtID; }
 
     void EmitCode(FunctionEmitContext *ctx) const;
-    void Print(int indent) const;
+    void Print(Indent &indent) const;
 
     Stmt *TypeCheck();
     int EstimateCost() const;
+    DefaultStmt *Instantiate(TemplateInstantiation &templInst) const;
 
     Stmt *stmts;
 };
@@ -406,10 +391,11 @@ class SwitchStmt : public Stmt {
     static inline bool classof(ASTNode const *N) { return N->getValueID() == SwitchStmtID; }
 
     void EmitCode(FunctionEmitContext *ctx) const;
-    void Print(int indent) const;
+    void Print(Indent &indent) const;
 
     Stmt *TypeCheck();
     int EstimateCost() const;
+    SwitchStmt *Instantiate(TemplateInstantiation &templInst) const;
 
     /** Expression that is used to determine which label to jump to. */
     Expr *expr;
@@ -426,11 +412,12 @@ class GotoStmt : public Stmt {
     static inline bool classof(ASTNode const *N) { return N->getValueID() == GotoStmtID; }
 
     void EmitCode(FunctionEmitContext *ctx) const;
-    void Print(int indent) const;
+    void Print(Indent &indent) const;
 
     Stmt *Optimize();
     Stmt *TypeCheck();
     int EstimateCost() const;
+    GotoStmt *Instantiate(TemplateInstantiation &templInst) const;
 
     /** Name of the label to jump to when the goto is executed. */
     std::string label;
@@ -447,11 +434,12 @@ class LabeledStmt : public Stmt {
     static inline bool classof(ASTNode const *N) { return N->getValueID() == LabeledStmtID; }
 
     void EmitCode(FunctionEmitContext *ctx) const;
-    void Print(int indent) const;
+    void Print(Indent &indent) const;
 
     Stmt *Optimize();
     Stmt *TypeCheck();
     int EstimateCost() const;
+    LabeledStmt *Instantiate(TemplateInstantiation &templInst) const;
 
     /** Name of the label. */
     std::string name;
@@ -469,10 +457,11 @@ class StmtList : public Stmt {
     static inline bool classof(ASTNode const *N) { return N->getValueID() == StmtListID; }
 
     void EmitCode(FunctionEmitContext *ctx) const;
-    void Print(int indent) const;
+    void Print(Indent &indent) const;
 
     Stmt *TypeCheck();
     int EstimateCost() const;
+    StmtList *Instantiate(TemplateInstantiation &templInst) const;
 
     void Add(Stmt *s) {
         if (s)
@@ -499,10 +488,11 @@ class PrintStmt : public Stmt {
     static inline bool classof(ASTNode const *N) { return N->getValueID() == PrintStmtID; }
 
     void EmitCode(FunctionEmitContext *ctx) const;
-    void Print(int indent) const;
+    void Print(Indent &indent) const;
 
     Stmt *TypeCheck();
     int EstimateCost() const;
+    PrintStmt *Instantiate(TemplateInstantiation &templInst) const;
 
     std::vector<llvm::Value *> getDoPrintArgs(FunctionEmitContext *ctx) const;
     std::vector<llvm::Value *> getPrintImplArgs(FunctionEmitContext *ctx) const;
@@ -547,10 +537,11 @@ class AssertStmt : public Stmt {
     void EmitAssertCode(FunctionEmitContext *ctx, const Type *type) const;
     void EmitAssumeCode(FunctionEmitContext *ctx, const Type *type) const;
     void EmitCode(FunctionEmitContext *ctx) const;
-    void Print(int indent) const;
+    void Print(Indent &indent) const;
 
     Stmt *TypeCheck();
     int EstimateCost() const;
+    AssertStmt *Instantiate(TemplateInstantiation &templInst) const;
 
     /** Message to print if the assertion fails. */
     const std::string message;
@@ -568,10 +559,11 @@ class DeleteStmt : public Stmt {
     static inline bool classof(ASTNode const *N) { return N->getValueID() == DeleteStmtID; }
 
     void EmitCode(FunctionEmitContext *ctx) const;
-    void Print(int indent) const;
+    void Print(Indent &indent) const;
 
     Stmt *TypeCheck();
     int EstimateCost() const;
+    DeleteStmt *Instantiate(TemplateInstantiation &templInst) const;
 
     /** Expression that gives the pointer value to be deleted. */
     Expr *expr;
